@@ -1,4 +1,4 @@
-interface Proxy {
+export interface Proxy {
   name: string;
   server: string;
   port: number;
@@ -15,7 +15,7 @@ interface WebsocketOpts {
   host?: string;
 }
 interface WebsocketHeaders {
-  host: string;
+  Host: string;
 }
 interface GrpcOpts {
   'grpc-service-name': string;
