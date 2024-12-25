@@ -1,3 +1,4 @@
 *test.md
 configs/*.test.json
 .tmp
+proxy-test.yaml
