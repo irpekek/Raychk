@@ -1,5 +1,8 @@
 {
   "tasks": {
-    
+    "start": "deno run -A main.ts"
+  },
+  "imports": {
+    "yaml": "npm:yaml@^2.6.1"
   }
 }
