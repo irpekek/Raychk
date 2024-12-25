@@ -6,7 +6,7 @@ type VlessEncryption = 'none';
 type VmessSecurity = 'auto' | 'none' | 'zero';
 type RAWSettingHeader = 'none';
 
-interface XrayOutbound {
+export interface XrayOutbound {
   sendThrough?: string;
   protocol: Protocol;
   settings: VmessSetting | VlessSetting | TrojanSetting;
@@ -83,11 +83,15 @@ interface SockOptions {
   tproxy: TProxy;
 }
 
-class Outbound {
+export class Outbound {
   protected _outbound: XrayOutbound[] = [];
 
   public all(): XrayOutbound[] {
     return this._outbound;
+  }
+
+  public clear(): void{
+    this._outbound.length = 0
   }
 
   private save(outbound: XrayOutbound): void {
