@@ -1,87 +1,17 @@
-type Protocol = 'vmess' | 'vless' | 'trojan';
-type Network = 'raw' | 'grpc' | 'ws';
-type StreamSecurity = 'none' | 'tls';
-type TProxy = 'redirect' | 'tproxy' | 'off';
-type VlessEncryption = 'none';
-type VmessSecurity = 'auto' | 'none' | 'zero';
-type RAWSettingHeader = 'none';
-
-export interface XrayOutbound {
-  sendThrough?: string;
-  protocol: Protocol;
-  settings: VmessSetting | VlessSetting | TrojanSetting;
-  tag: string;
-  streamSettings: StreamSetting;
-  proxySettings?: object;
-  mux?: object;
-}
-interface BaseServer {
-  address: string;
-  port: number;
-}
-// * VMESS SET
-interface VmessSetting {
-  vnext: VmessServer[];
-}
-interface VmessServer extends BaseServer {
-  users: VmessUser[];
-}
-interface VmessUser {
-  id: string;
-  security: VmessSecurity;
-  level: number;
-}
-// * VLESS SET
-interface VlessSetting {
-  vnext: VlessServer[];
-}
-interface VlessServer extends BaseServer {
-  users: VlessUser[];
-}
-interface VlessUser extends Omit<VmessUser, 'security'> {
-  encryption: VlessEncryption;
-  flow: string;
-}
-// * TROJAN SET
-interface TrojanSetting {
-  servers: TrojanServer[];
-}
-interface TrojanServer extends BaseServer, TrojanUser {}
-interface TrojanUser {
-  password: string;
-  email?: string;
-  level: number;
-}
-interface StreamSetting {
-  network: Network;
-  security?: StreamSecurity;
-  tlsSettings?: TLSSetting;
-  wsSettings?: WSSetting;
-  grpcSettings?: GRPCSetting;
-  rawSettings?: RAWSetting;
-  sockopt?: SockOptions;
-}
-interface TLSSetting {
-  serverName: string;
-  allowInsecure: boolean;
-  alpn: string[];
-  fingerprint: string;
-}
-interface WSSetting {
-  path: string;
-  host: string;
-}
-interface GRPCSetting {
-  serviceName: string;
-}
-interface RAWSetting {
-  header: RAWSettingHeader;
-}
-interface SockOptions {
-  mark: number;
-  tcpFastOpen: boolean;
-  tproxy: TProxy;
-}
+import {
+  XrayOutbound,
+  TLSSetting,
+  VmessUser,
+  VmessServer,
+  VmessSetting,
+  StreamSetting,
+  VlessUser,
+  VlessServer,
+  VlessSetting,
+  TrojanUser,
+  TrojanServer,
+  TrojanSetting,
+} from './outbound.types.ts';
 
 export class Outbound {
   protected _outbound: XrayOutbound[] = [];
@@ -90,8 +20,8 @@ export class Outbound {
     return this._outbound;
   }
 
-  public clear(): void{
-    this._outbound.length = 0
+  public clear(): void {
+    this._outbound.length = 0;
   }
 
   private save(outbound: XrayOutbound): void {
@@ -290,7 +220,13 @@ export class Outbound {
     }
   }
 
-  public trojanGRPC(name: string, password:string, server: string, port: number, serviceName: string){
+  public trojanGRPC(
+    name: string,
+    password: string,
+    server: string,
+    port: number,
+    serviceName: string
+  ) {
     if (this.hasTag(name)) return console.error(`${name} tag is already taken`);
     const trojan = new Trojan(password, server, port);
     const tlsSettings: TLSSetting = generateTLS(server);
@@ -589,18 +525,6 @@ class Trojan {
       tlsSettings: tls,
     };
   }
-
-  private sockOpts(streamSetting: StreamSetting): StreamSetting {
-    return {
-      ...streamSetting,
-      network: streamSetting.network,
-      sockopt: {
-        mark: 0,
-        tcpFastOpen: true,
-        tproxy: 'tproxy',
-      },
-    };
-  }
 }
 
 function generateTLS(server: string): TLSSetting {
@@ -611,4 +535,3 @@ function generateTLS(server: string): TLSSetting {
     fingerprint: 'chrome',
   };
 }
-

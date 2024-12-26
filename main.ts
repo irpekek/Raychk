@@ -325,44 +325,48 @@ function checkAliveProxy(): Promise<IPInfo | null> {
     xray.stderr.on('data', (data) => {
       console.error(`Error: ${data}`);
     });
-    xray.on('close', (code) => {
-      console.log(`xray process exited with code ${code}`);
-    });
   });
 }
 
-const proxies = await getProxy('.', 'proxy-test.yaml');
-const filteredProxy = filterProxy(proxies);
+async function main(): Promise<void> {
+  const proxies = await getProxy('.', 'proxy-test.yaml');
+  const filteredProxy = filterProxy(proxies);
 
-for (const proxy of filteredProxy) {
-  console.log(`Started: ${proxy.server}`);
-  const testConfig = { ...proxy };
-  switch (true) {
-    case isVmess(testConfig):
-      generateVmessConfig(testConfig);
-      break;
-    case isVless(testConfig):
-      generateVlessConfig(testConfig);
-      break;
-    case isTrojan(testConfig):
-      generateTrojanConfig(testConfig);
-      break;
-    default:
-      console.error('config not supported');
-      break;
+  for (const proxy of filteredProxy) {
+    console.log(`Started: ${proxy.server}`);
+    const conf = { ...proxy };
+    switch (true) {
+      case isVmess(conf):
+        generateVmessConfig(conf);
+        break;
+      case isVless(conf):
+        generateVlessConfig(conf);
+        break;
+      case isTrojan(conf):
+        generateTrojanConfig(conf);
+        break;
+      default:
+        console.error('config not supported');
+        continue;
+    }
+    const defaultConf = await getXrayConfig(CONFIG_DIR, 'defaultConfig.json');
+    const config: XrayConfig = { ...defaultConf, outbounds: outbound.all() };
+    setXrayConfig(TEMP_DIR, 'config.json', config);
+    const alive = await checkAliveProxy();
+    if (alive) activeProxy.add(proxy);
+    else deadProxy.add(proxy);
+    outbound.clear();
+    console.log(`End: ${proxy.server}`);
   }
-  const defaultConf = await getXrayConfig(CONFIG_DIR, 'defaultConfig.json');
-  const config: XrayConfig = { ...defaultConf, outbounds: outbound.all() };
-  setXrayConfig(TEMP_DIR, 'config.json', config);
-  const alive = await checkAliveProxy();
-  if (alive) activeProxy.add(proxy);
-  else deadProxy.add(proxy);
-  outbound.clear();
-  console.log(`End: ${proxy.server}`);
+
+  console.log(`Alive: ${activeProxy.size}`);
+  console.log(`Die: ${deadProxy.size}`);
+
+  const ms = new Date().getMilliseconds();
+  Deno.writeTextFileSync(
+    `./hasil${ms}.yaml`,
+    YAML.stringify({ proxies: Array.from(activeProxy) })
+  );
 }
 
-console.log(`Alive: ${activeProxy.size}`);
-console.log(`Die: ${deadProxy.size}`);
-
-const ms = new Date().getMilliseconds()
-Deno.writeTextFileSync(`./hasil${ms}.yaml`, YAML.stringify({proxies: Array.from(activeProxy)}))
+await main();

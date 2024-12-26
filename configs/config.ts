@@ -1,4 +1,4 @@
-import { XrayOutbound } from "./outbound.ts";
+import { XrayOutbound } from "./outbound.types.ts";
 
 export interface XrayConfig {
   log: object;
