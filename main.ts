@@ -15,6 +15,7 @@ import {
 import { spawn } from 'node:child_process';
 import { getInfoIP, IPInfo } from './utils/ipinfo.ts';
 import YAML from 'yaml';
+import path from 'node:path';
 
 export const isError = (obj: unknown): obj is Error => {
   return obj !== null && typeof obj === 'object' && obj instanceof Error;
@@ -328,8 +329,15 @@ function checkAliveProxy(): Promise<IPInfo | null> {
   });
 }
 
-async function main(): Promise<void> {
-  const proxies = await getProxy('.', 'proxy-test.yaml');
+async function main(filePath: string): Promise<void> {
+  const parsedPath = path.parse(filePath);
+  let proxies
+  try {
+    proxies = await getProxy(parsedPath.dir, parsedPath.base);
+  } catch (error) {
+    if(isError(error)) console.error(error.message)
+    return
+  }
   const filteredProxy = filterProxy(proxies);
 
   for (const proxy of filteredProxy) {
@@ -369,4 +377,4 @@ async function main(): Promise<void> {
   );
 }
 
-await main();
+if (Deno.args[0]) await main(Deno.args[0]);
