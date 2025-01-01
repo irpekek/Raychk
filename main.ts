@@ -368,7 +368,7 @@ async function main(filePath: string): Promise<void> {
   }
 
   console.log(`Alive: ${activeProxy.size}`);
-  console.log(`Die: ${deadProxy.size}`);
+  console.log('Die: ', proxies.length - activeProxy.size);
 
   const ms = new Date().getMilliseconds();
   Deno.writeTextFileSync(
