@@ -92,7 +92,7 @@ function filterProxy(proxies: Proxy[]): Set<Vmess | Vless | Trojan> {
         reshapeProxy.add({
           ...proxy,
           name: `${proxy.name}_clone`,
-          server: proxy['ws-opts'].headers.Host,
+          server: proxy['ws-opts'].headers?.Host || proxy.server,
         });
       }
       // * VMESS GRPC
