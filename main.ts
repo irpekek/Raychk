@@ -75,131 +75,90 @@ function filterProxy<T extends Vmess | Vless | Trojan>(
 // * This reshape used to equalized value of server, servername, and host options
 function reshapeProxy(proxies: Proxy[]): Set<Vmess | Vless | Trojan> {
   const reshapeProxy = new Set<Vmess | Vless | Trojan>();
+
+  function addVWSTLS(proxy: Vmess | Vless): void {
+    reshapeProxy.add({
+      ...proxy,
+      servername: proxy.server,
+      'ws-opts': {
+        path: proxy['ws-opts']?.path || '/',
+        headers: { Host: proxy.server },
+      },
+    });
+
+    reshapeProxy.add({
+      ...proxy,
+      name: `${proxy.name}_clone`,
+      server: proxy.servername || proxy.server,
+    });
+  }
+  function addVWSNTLS(proxy: Vmess | Vless): void {
+    reshapeProxy.add({
+      ...proxy,
+      'ws-opts': {
+        path: proxy['ws-opts']?.path || '/',
+        headers: { Host: proxy.server },
+      },
+    });
+    reshapeProxy.add({
+      ...proxy,
+      name: `${proxy.name}_clone`,
+      server: proxy['ws-opts']?.headers?.Host || proxy.server,
+    });
+  }
+  function addVGRPC(proxy: Vmess | Vless): void {
+    reshapeProxy.add({ ...proxy, servername: proxy.server });
+    reshapeProxy.add({
+      ...proxy,
+      name: `${proxy.name}_clone`,
+      server: proxy.servername || proxy.server,
+    });
+  }
+  function addTrojanWS(proxy: Trojan): void {
+    reshapeProxy.add({
+      ...proxy,
+      sni: proxy.server,
+      'ws-opts': {
+        path: proxy['ws-opts']?.path || '/',
+        headers: { Host: proxy.server },
+      },
+    });
+    reshapeProxy.add({
+      ...proxy,
+      name: `${proxy.name}_clone`,
+      server: proxy.sni,
+    });
+  }
+  function addTrojanGRPC(proxy: Trojan): void {
+    reshapeProxy.add({ ...proxy, sni: proxy.server });
+    reshapeProxy.add({
+      ...proxy,
+      name: `${proxy.name}_clone`,
+      server: proxy.sni,
+    });
+  }
+
   for (const proxy of proxies) {
-    if (isVmess(proxy)) {
-      // * VMESS WS TLS
-      if (
-        isWebsocket(proxy) &&
-        proxy['ws-opts'] &&
-        isTLS(proxy) &&
-        proxy.servername
-      ) {
-        reshapeProxy.add({
-          ...proxy,
-          servername: proxy.server,
-          'ws-opts': {
-            path: proxy['ws-opts'].path,
-            headers: { Host: proxy.server },
-          },
-        });
-
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy.servername,
-        });
-      }
-
-      // * VMESS WS NON-TLS
-      if (isWebsocket(proxy) && proxy['ws-opts'] && !isTLS(proxy)) {
-        reshapeProxy.add({
-          ...proxy,
-          'ws-opts': {
-            path: proxy['ws-opts'].path,
-            headers: { Host: proxy.server },
-          },
-        });
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy['ws-opts'].headers?.Host || proxy.server,
-        });
-      }
-      // * VMESS GRPC
-      if (isGRPC(proxy) && proxy.servername) {
-        reshapeProxy.add({ ...proxy, servername: proxy.server });
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy.servername,
-        });
-      }
-    }
-
-    if (isVless(proxy)) {
-      // * VLESS WS TLS
-      if (
-        isWebsocket(proxy) &&
-        proxy['ws-opts'] &&
-        isTLS(proxy) &&
-        proxy.servername
-      ) {
-        reshapeProxy.add({
-          ...proxy,
-          servername: proxy.server,
-          'ws-opts': {
-            path: proxy['ws-opts'].path,
-            headers: { Host: proxy.server },
-          },
-        });
-
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy.servername,
-        });
-      }
-
-      // * VLESS WS NON-TLS
-      if (isWebsocket(proxy) && proxy['ws-opts'] && !isTLS(proxy)) {
-        reshapeProxy.add({
-          ...proxy,
-          'ws-opts': {
-            path: proxy['ws-opts'].path,
-            headers: { Host: proxy.server },
-          },
-        });
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy['ws-opts'].headers?.Host || proxy.server,
-        });
-      }
-
-      if (isGRPC(proxy) && proxy.servername) {
-        reshapeProxy.add({ ...proxy, servername: proxy.server });
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy.servername,
-        });
-      }
-    }
-
-    if (isTrojan(proxy)) {
-      if (isWebsocket(proxy) && proxy['ws-opts']) {
-        reshapeProxy.add({
-          ...proxy,
-          sni: proxy.server,
-          'ws-opts': {
-            path: proxy['ws-opts'].path,
-            headers: { Host: proxy.server },
-          },
-        });
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy.sni,
-        });
-      }
-      if (isGRPC(proxy)) {
-        reshapeProxy.add({ ...proxy, sni: proxy.server });
-        reshapeProxy.add({
-          ...proxy,
-          name: `${proxy.name}_clone`,
-          server: proxy.sni,
-        });
-      }
+    switch (true) {
+      case isVmess(proxy):
+        if (isWebsocket(proxy) && isTLS(proxy)) addVWSTLS(proxy);
+        else if (isWebsocket(proxy) && !isTLS(proxy)) addVWSNTLS(proxy);
+        else if (isGRPC(proxy)) addVGRPC(proxy);
+        else continue;
+        break;
+      case isVless(proxy):
+        if (isWebsocket(proxy) && isTLS(proxy)) addVWSTLS(proxy);
+        else if (isWebsocket(proxy) && !isTLS(proxy)) addVWSNTLS(proxy);
+        else if (isGRPC(proxy)) addVGRPC(proxy);
+        else continue;
+        break;
+      case isTrojan(proxy):
+        if (isWebsocket(proxy)) addTrojanWS(proxy);
+        else if (isGRPC(proxy)) addTrojanGRPC(proxy);
+        else continue;
+        break;
+      default:
+        continue;
     }
   }
   return reshapeProxy;
