@@ -314,9 +314,11 @@ async function main(filePath: string): Promise<void> {
     return;
   }
 
+  console.log('Reshape proxy...');
   const reshapedProxy = reshapeProxy(proxies);
+  console.log('Filter proxy...');
   const filteredProxy = filterProxy(reshapedProxy);
-
+  console.log('Check active proxy...');
   for (const proxy of filteredProxy) {
     console.log(`Started: ${proxy.server}`);
     const conf = { ...proxy };
@@ -331,7 +333,7 @@ async function main(filePath: string): Promise<void> {
         generateTrojanConfig(conf);
         break;
       default:
-        console.error('config not supported');
+        console.error('Config not supported');
         continue;
     }
     const defaultConf = await getXrayConfig(CONFIG_DIR, 'defaultConfig.json');
@@ -349,9 +351,10 @@ async function main(filePath: string): Promise<void> {
 
   const ms = new Date().getMilliseconds();
   Deno.writeTextFileSync(
-    `./hasil${ms}.yaml`,
+    `./activeProxy${ms}.yaml`,
     YAML.stringify({ proxies: Array.from(activeProxy) })
   );
+  console.log(`Proxy saved at activeProxy${ms}.yaml`);
   return;
 }
 
