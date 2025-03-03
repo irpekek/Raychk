@@ -50,11 +50,31 @@ async function getProxy(path: string, fileName: string): Promise<Proxy[]> {
   return parsedYaml.proxies;
 }
 
-function filterProxy(proxies: Proxy[]): Set<Vmess | Vless | Trojan> {
-  const reshapeProxy = new Set<Vmess | Vless | Trojan>();
-  const filteredProxy = new Set<Vmess | Vless | Trojan>();
+// * This filter used to prevent same server value
+function filterProxy<T extends Vmess | Vless | Trojan>(
+  proxies: Set<T>
+): Set<T> {
+  const filteredProxy = new Set<T>();
   const usedServer = new Set<string>();
-  // * This reshape used to equalized value of server, servername, and host options
+  const blockedIpPrefix = ['127', '192'];
+  const blockedDomain = ['localhost'];
+  for (const proxy of proxies) {
+    if (!proxy.server) continue;
+    const isBlockedIp = blockedIpPrefix.some((prefix) =>
+      proxy.server.startsWith(prefix)
+    );
+    const isBlockedDomain = blockedDomain.includes(proxy.server);
+    if (!usedServer.has(proxy.server) && !isBlockedDomain && !isBlockedIp) {
+      usedServer.add(proxy.server);
+      filteredProxy.add(proxy);
+    }
+  }
+  return filteredProxy;
+}
+
+// * This reshape used to equalized value of server, servername, and host options
+function reshapeProxy(proxies: Proxy[]): Set<Vmess | Vless | Trojan> {
+  const reshapeProxy = new Set<Vmess | Vless | Trojan>();
   for (const proxy of proxies) {
     if (isVmess(proxy)) {
       // * VMESS WS TLS
@@ -182,14 +202,7 @@ function filterProxy(proxies: Proxy[]): Set<Vmess | Vless | Trojan> {
       }
     }
   }
-  // * This filter used to prevent same server value
-  for (const proxy of reshapeProxy) {
-    if (!usedServer.has(proxy.server)) {
-      usedServer.add(proxy.server);
-      filteredProxy.add(proxy);
-    }
-  }
-  return filteredProxy;
+  return reshapeProxy;
 }
 
 function generateVmessConfig(config: Vmess) {
@@ -341,7 +354,9 @@ async function main(filePath: string): Promise<void> {
     if (isError(error)) console.error(error.message);
     return;
   }
-  const filteredProxy = filterProxy(proxies);
+
+  const reshapedProxy = reshapeProxy(proxies);
+  const filteredProxy = filterProxy(reshapedProxy);
 
   for (const proxy of filteredProxy) {
     console.log(`Started: ${proxy.server}`);
