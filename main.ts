@@ -1,3 +1,6 @@
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import YAML from 'yaml';
 import { XrayConfig } from './configs/config.ts';
 import { Outbound } from './configs/outbound.ts';
 import {
@@ -12,10 +15,7 @@ import {
   Vless,
   Vmess,
 } from './types.ts';
-import { spawn } from 'node:child_process';
 import { getInfoIP, IPInfo } from './utils/ipinfo.ts';
-import YAML from 'yaml';
-import path from 'node:path';
 
 export const isError = (obj: unknown): obj is Error => {
   return obj !== null && typeof obj === 'object' && obj instanceof Error;
@@ -297,7 +297,7 @@ function generateTrojanConfig(config: Trojan) {
 }
 
 function checkAliveProxy(): Promise<IPInfo | null> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     const xray = spawn(BINARY_FILE, ['-c', `${TEMP_DIR}/config.json`]);
     xray.stdout.on('data', (data) => {
       const message = String(data);
@@ -317,8 +317,8 @@ function checkAliveProxy(): Promise<IPInfo | null> {
             if (ipInfo) resolve(ipInfo);
             else resolve(null);
           } catch (error) {
-            console.log('ERROR:' + error);
-            reject(error);
+            console.error(error);
+            resolve(null);
           }
         }, 2000);
       }
@@ -326,17 +326,20 @@ function checkAliveProxy(): Promise<IPInfo | null> {
     xray.stderr.on('data', (data) => {
       console.error(`Error: ${data}`);
     });
+    xray.on('close', (_code) => {
+      resolve(null);
+    });
   });
 }
 
 async function main(filePath: string): Promise<void> {
   const parsedPath = path.parse(filePath);
-  let proxies
+  let proxies;
   try {
     proxies = await getProxy(parsedPath.dir, parsedPath.base);
   } catch (error) {
-    if(isError(error)) console.error(error.message)
-    return
+    if (isError(error)) console.error(error.message);
+    return;
   }
   const filteredProxy = filterProxy(proxies);
 
@@ -375,6 +378,12 @@ async function main(filePath: string): Promise<void> {
     `./hasil${ms}.yaml`,
     YAML.stringify({ proxies: Array.from(activeProxy) })
   );
+  return;
 }
 
-if (Deno.args[0]) await main(Deno.args[0]);
+if (Deno.args[0])
+  try {
+    await main(Deno.args[0]);
+  } catch (error) {
+    console.error(error);
+  }
