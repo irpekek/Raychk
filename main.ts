@@ -23,10 +23,18 @@ export const isError = (obj: unknown): obj is Error => {
 
 const CONFIG_DIR = './configs';
 const TEMP_DIR = './.tmp';
-const BINARY_FILE = '/usr/local/bin/xray';
+const BINARY_FILE = await xrayLocation();
 const outbound = new Outbound();
 const activeProxy = new Set();
 const deadProxy = new Set();
+
+async function xrayLocation(): Promise<string> {
+  const cmd = new Deno.Command('which', { args: ['xray'] });
+  const { code, stdout, stderr } = await cmd.output();
+  const location = new TextDecoder().decode(stdout).trim();
+  if (location.length === 0 || location === 'undefined') return 'not found';
+  return location;
+}
 
 async function getXrayConfig(
   path: string,
@@ -305,6 +313,12 @@ function checkAliveProxy(): Promise<IPInfo | null> {
 }
 
 async function main(filePath: string): Promise<void> {
+  if (BINARY_FILE === 'not found') {
+    console.error('Xray not found');
+    console.error('Please install Xray first');
+    return;
+  }
+
   const parsedPath = path.parse(filePath);
   let proxies;
   try {
