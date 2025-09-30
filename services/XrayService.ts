@@ -3,6 +3,7 @@ import { XrayConfiguration } from '../types/xray.type.d.ts';
 import { BINARY_FILE } from '../const/const.ts';
 import { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { Buffer } from 'node:buffer';
+import { exists } from '@std/fs';
 
 export class XrayService {
   static async location(): Promise<string> {
@@ -17,8 +18,14 @@ export class XrayService {
     path: string,
     fileName: string,
   ): Promise<XrayConfiguration> {
-    const jsonVal = await Deno.readTextFile(`${path}/${fileName}`);
-    return JSON.parse(jsonVal);
+    try {
+      const jsonStr = await Deno.readTextFile(`${path}/${fileName}`);
+      return JSON.parse(jsonStr);
+    } catch (error: unknown) {
+      if (Error.isError(error))
+        throw new Error('Get Configuration: ' + error.message);
+      throw new Error('Get Configuration: ' + error);
+    }
   }
 
   static async setConfiguration(
@@ -26,7 +33,15 @@ export class XrayService {
     fileName: string,
     config: XrayConfiguration,
   ): Promise<void> {
-    await Deno.writeTextFile(`${path}/${fileName}`, JSON.stringify(config));
+    try {
+      const isFolderExists = await exists(path);
+      if (!isFolderExists) await Deno.mkdir(path, { recursive: true });
+      await Deno.writeTextFile(`${path}/${fileName}`, JSON.stringify(config));
+    } catch (error: unknown) {
+      if (Error.isError(error))
+        console.error(`Set Configuration: ${error.message}`);
+      else console.error(`Set Configuration: ${error}`);
+    }
   }
 
   static spawn(configLocation: string): ChildProcessWithoutNullStreams {

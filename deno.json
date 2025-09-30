@@ -3,6 +3,7 @@
     "start": "deno run -A main.ts"
   },
   "imports": {
+    "@std/fs": "jsr:@std/fs@^1.0.19",
     "@types/node": "npm:@types/node@^22.13.8",
     "yaml": "npm:yaml@^2.6.1"
   }
