@@ -1,5 +1,6 @@
 import YAML from 'yaml';
 import {
+  hasProxies,
   isGRPC,
   isTLS,
   isTrojan,
@@ -55,12 +56,12 @@ class ProxyService {
   // * Get proxies from a file
   public async file(path: string, fileName: string) {
     try {
-      const val = await Deno.readTextFile(`${path}/${fileName}`);
-      const parsedYaml = YAML.parse(val);
-      if (parsedYaml.proxies) this._proxies = parsedYaml.proxies;
-      else throw new Error("'proxies:' is not found");
-    } catch (_err: unknown) {
-      console.error(_err);
+      const text = await Deno.readTextFile(`${path}/${fileName}`);
+      const parsedObj = YAML.parse(text);
+      if (hasProxies(parsedObj)) this._proxies = parsedObj.proxies;
+      else throw new Error('proxies are not found');
+    } catch (err: unknown) {
+      console.error(err);
       Deno.exit(1);
     }
   }
@@ -312,7 +313,7 @@ class ProxyService {
       if (!ipInfo) throw new Error('Invalid or empty IP respons');
       return ipInfo;
     } catch (error: unknown) {
-      if(Error.isError(error))
+      if (Error.isError(error))
         console.error('Proxy check failed:', error.message);
       return null;
     } finally {

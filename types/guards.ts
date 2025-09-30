@@ -1,5 +1,19 @@
-import { TrojanProxy, VlessProxy, VmessProxy, Proxy } from "./proxy.type.d.ts";
+import { TrojanProxy, VlessProxy, VmessProxy, Proxy } from './proxy.type.d.ts';
 import { XrayConfiguration } from './xray.type.d.ts';
+
+export const hasProxies = (obj: unknown): obj is { proxies: Proxy[] } => {
+  return (
+    obj !== null &&
+    typeof obj === 'object' &&
+    'proxies' in obj &&
+    obj.proxies != null &&
+    Array.isArray(obj.proxies) &&
+    obj.proxies.length > 0 &&
+    obj.proxies.every(
+      (proxy) => proxy !== null && typeof proxy === 'object' && 'type' in proxy,
+    )
+  );
+};
 
 export const isXrayConfig = (obj: unknown): obj is XrayConfiguration => {
   return obj !== null && typeof obj === 'object' && 'outbounds' in obj;
