@@ -35,7 +35,7 @@ class ProxyService {
   protected _blockedDomain = ['localhost'];
   protected _liveProxies: Set<VmessProxy | VlessProxy | TrojanProxy>;
   protected readonly XRAY_START_TIMEOUT = 5000;
-  protected readonly IP_FETCH_TIMEOUT = 15000;
+  protected readonly IP_FETCH_TIMEOUT = 5000;
   protected readonly POST_START_DELAY = 1000;
   protected readonly HTTP_LISTEN = '127.0.0.1';
 
@@ -295,6 +295,19 @@ class ProxyService {
     return outbound.all();
   }
 
+  private async throttle(
+    m: Array<() => Promise<void>>,
+    concurrency: number = 20,
+    timeout: number = 1000,
+  ) {
+    for (let i = 0; i < m.length; i += concurrency) {
+      console.log(`${i + 1} ~ ${Math.min(i + concurrency, m.length)}`);
+      const batch = m.slice(i, i + concurrency);
+      await Promise.all(batch.map((fn) => fn()));
+      await new Promise((resolve) => setTimeout(resolve, timeout));
+    }
+  }
+
   private async checkProxy(
     xray: ChildProcessWithoutNullStreams,
     fp: (VmessProxy | VlessProxy | TrojanProxy)[],
@@ -312,29 +325,30 @@ class ProxyService {
 
       if (!isStarted) throw new Error('Xray failed to start');
 
-      await Promise.all(
-        fp.map(async (proxy, index) => {
-          const port = 1081 + index;
-          try {
-            const info = await Promise.race([
-              infoIP(this.HTTP_LISTEN, port),
-              new Promise<IPInfo | null>((resolve) =>
-                setTimeout(() => resolve(null), this.IP_FETCH_TIMEOUT),
-              ),
-            ]);
-            if (info) this._liveProxies.add(proxy);
-          } catch (error: unknown) {
-            if (Error.isError(error))
-              console.error(
-                `Check failed for ${proxy.server} (port: ${port}): ${error.message}`,
-              );
-            else
-              console.error(
-                `Unexpected error for ${proxy.server} (port: ${port}): ${error}`,
-              );
-          }
-        }),
-      );
+      // Create pending promises for each proxy
+      const promisesProxy = fp.map((proxy, index) => async () => {
+        const port = 1081 + index;
+        try {
+          const info = await Promise.race([
+            infoIP(this.HTTP_LISTEN, port),
+            new Promise<IPInfo | null>((resolve) =>
+              setTimeout(() => resolve(null), this.IP_FETCH_TIMEOUT),
+            ),
+          ]);
+          if (info) this._liveProxies.add(proxy);
+        } catch (error: unknown) {
+          if (Error.isError(error))
+            console.error(
+              `Check failed for ${proxy.server} (port: ${port}): ${error.message}`,
+            );
+          else
+            console.error(
+              `Unexpected error for ${proxy.server} (port: ${port}): ${error}`,
+            );
+        }
+      });
+
+      await this.throttle(promisesProxy, 20); // Throttle the check to prevent Xray from being overwhelmed
 
       // Kill Xray after all check
       if (xray && !xray.killed) xray.kill('SIGTERM');
@@ -356,6 +370,7 @@ class ProxyService {
 
     const srcConf = path.parse(filePath);
     await this.file(srcConf.dir, srcConf.base);
+    const timeStart = Date.now();
     this.reshape().filter();
 
     const outboundService = new OutboundService();
@@ -417,25 +432,29 @@ class ProxyService {
 
       await Xray.setConfiguration(TEMP_DIR, 'config.json', config);
       const xray = Xray.spawn(`${TEMP_DIR}/config.json`);
+      console.log(`Checking proxies...`);
       await this.checkProxy(xray, fp);
     } catch (error: unknown) {
       if (Error.isError(error)) console.error(`Scan failed: ${error.message}`);
       else console.error(`Unknown error, Scan failed: ${error}`);
     }
-
+    console.log(
+      `Scan finished in ${((Date.now() - timeStart) / 1000).toFixed(2)} seconds`,
+    );
     this.result();
   }
 
   public result() {
-    console.log('Live Proxy: ', this._liveProxies.size);
-    console.log('Dead Proxy: ', this._proxies.length - this._liveProxies.size);
+    console.log('Total Proxy:', this._proxies.length);
+    console.log('Live:', this._liveProxies.size);
+    console.log('Die :', this._proxies.length - this._liveProxies.size);
     const dt = new Date().getMilliseconds();
-    const name = `./Live Proxy ${dt}.yaml`;
+    const name = `./Live_Proxy_${dt}.yaml`;
     const content = YAML.stringify({
       proxies: Array.from(this._liveProxies),
     });
     Deno.writeTextFileSync(name, content);
-    console.log(`Saved File: Live Proxy ${dt}.yaml`);
+    console.log(`Saved File: Live_Proxy_${dt}.yaml`);
   }
 }
 
