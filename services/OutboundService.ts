@@ -14,26 +14,22 @@ type AdditionalData = {
 type CommunicationService = Vmess | Vless | Trojan;
 
 export class OutboundService {
-  protected _outbound: Outbound[];
+  protected _outbounds: Outbound[];
 
   constructor() {
-    this._outbound = [];
+    this._outbounds = [];
   }
 
-  public all(): Outbound[] {
-    return this._outbound;
+  public get outbounds(): Outbound[] {
+    return this._outbounds;
   }
 
   public clear(): void {
-    this._outbound.length = 0;
+    this._outbounds.length = 0;
   }
 
-  public save(outbound: Outbound): void {
-    this._outbound.push(outbound);
-  }
-
-  public allTags(): string[] {
-    return this._outbound.map((outbound) => outbound.tag);
+  public add(outbound: Outbound): void {
+    this._outbounds.push(outbound);
   }
 
   private createOutbound(
@@ -55,7 +51,7 @@ export class OutboundService {
   }
 
   private hasTag(name: string): boolean {
-    const outbounds = this.all();
+    const outbounds = this._outbounds;
     const tag = outbounds.find((outbound) => outbound.tag === name);
     return tag ? true : false;
   }
@@ -114,7 +110,7 @@ export class OutboundService {
       communicationProtocol,
       transportProtocol,
     );
-    this.save(outbound);
+    this.add(outbound);
   }
 
   public vless(
@@ -139,7 +135,7 @@ export class OutboundService {
       communicationProtocol,
       transportProtocol,
     );
-    this.save(outbound);
+    this.add(outbound);
   }
 
   public trojan(
@@ -164,6 +160,6 @@ export class OutboundService {
       communicationProtocol,
       transportProtocol,
     );
-    this.save(outbound);
+    this.add(outbound);
   }
 }

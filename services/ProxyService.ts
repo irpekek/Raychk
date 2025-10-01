@@ -27,6 +27,8 @@ import { RoutingService } from './RoutingService.ts';
 import { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { validate } from '@std/uuid';
 
+const { isError } = Error;
+
 class ProxyService {
   protected _proxies: Proxy[];
   protected _reshapedProxies: Set<VmessProxy | VlessProxy | TrojanProxy>;
@@ -65,8 +67,10 @@ class ProxyService {
       const parsedObj = YAML.parse(text, { merge: true });
       if (hasProxies(parsedObj)) this._proxies = parsedObj.proxies;
       else throw new Error('proxies are not found');
-    } catch (err: unknown) {
-      console.error(err);
+    } catch (error: unknown) {
+      if (isError(error))
+        console.error('Failed to read proxies file:', error.message);
+      else console.error('Unknown error, Failed to read proxies file:', error);
       Deno.exit(1);
     }
   }
@@ -292,7 +296,7 @@ class ProxyService {
         break;
     }
 
-    return outbound.all();
+    return outbound.outbounds;
   }
 
   private async throttle(
@@ -337,7 +341,7 @@ class ProxyService {
           ]);
           if (info) this._liveProxies.add(proxy);
         } catch (error: unknown) {
-          if (Error.isError(error))
+          if (isError(error))
             console.error(
               `Check failed for ${proxy.server} (port: ${port}): ${error.message}`,
             );
@@ -354,7 +358,8 @@ class ProxyService {
       if (xray && !xray.killed) xray.kill('SIGTERM');
       await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error: unknown) {
-      console.error('Scan failed:', error);
+      if (isError(error)) console.error('Scan failed:', error.message);
+      else console.error('Unknown error, Scan failed:', error);
     } finally {
       // Ensure Xray is killed even on error
       if (xray && !xray.killed) xray.kill('SIGTERM');
@@ -382,26 +387,14 @@ class ProxyService {
     for (const [index, proxy] of fp.entries()) {
       const outboundNameTag = 'Proxy ' + (index + 1);
       const inboundNameTag = 'Http ' + (index + 1);
-      let outbounds: Outbound[];
 
-      // Create outbounds from all filtered proxies and save them to outboundService
-      switch (true) {
-        case isVmess(proxy):
-          outbounds = this.generateConfig({ ...proxy, name: outboundNameTag });
-          if (outbounds.length > 0) outboundService.save(outbounds[0]);
-          break;
-        case isVless(proxy):
-          outbounds = this.generateConfig({ ...proxy, name: outboundNameTag });
-          if (outbounds.length > 0) outboundService.save(outbounds[0]);
-          break;
-        case isTrojan(proxy):
-          outbounds = this.generateConfig({ ...proxy, name: outboundNameTag });
-          if (outbounds.length > 0) outboundService.save(outbounds[0]);
-          break;
-        default:
-          console.error('Config not supported');
-          continue;
-      }
+      // Create outbounds from all filtered proxies and save them to outbound instance
+      const outbounds = this.generateConfig({
+        ...proxy,
+        name: outboundNameTag,
+      });
+      if (outbounds.length > 0) outboundService.add(outbounds[0]);
+      else continue;
 
       // Create inbounds http protocol for each proxy with a unique port
       inboundService.http(this.HTTP_LISTEN, portCounter, inboundNameTag);
@@ -426,16 +419,16 @@ class ProxyService {
       const config: XrayConfiguration = {
         ...defaultConfig,
         inbounds: inboundService.inbounds,
-        outbounds: outboundService.all(),
+        outbounds: outboundService.outbounds,
         routing: routingService.routing,
       };
 
       await Xray.setConfiguration(TEMP_DIR, 'config.json', config);
-      const xray = Xray.spawn(`${TEMP_DIR}/config.json`);
+      const xray = Xray.start(`${TEMP_DIR}/config.json`);
       console.log(`Checking proxies...`);
       await this.checkProxy(xray, fp);
     } catch (error: unknown) {
-      if (Error.isError(error)) console.error(`Scan failed: ${error.message}`);
+      if (isError(error)) console.error(`Scan failed: ${error.message}`);
       else console.error(`Unknown error, Scan failed: ${error}`);
     }
     console.log(

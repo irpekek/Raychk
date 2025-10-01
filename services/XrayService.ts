@@ -5,6 +5,8 @@ import { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import { exists } from '@std/fs';
 
+const { isError } = Error;
+
 export class XrayService {
   static async location(): Promise<string> {
     const cmd = new Deno.Command('which', { args: ['xray'] });
@@ -22,7 +24,7 @@ export class XrayService {
       const jsonStr = await Deno.readTextFile(`${path}/${fileName}`);
       return JSON.parse(jsonStr);
     } catch (error: unknown) {
-      if (Error.isError(error))
+      if (isError(error))
         throw new Error('Get Configuration: ' + error.message);
       throw new Error('Get Configuration: ' + error);
     }
@@ -38,13 +40,12 @@ export class XrayService {
       if (!isFolderExists) await Deno.mkdir(path, { recursive: true });
       await Deno.writeTextFile(`${path}/${fileName}`, JSON.stringify(config));
     } catch (error: unknown) {
-      if (Error.isError(error))
-        console.error(`Set Configuration: ${error.message}`);
+      if (isError(error)) console.error(`Set Configuration: ${error.message}`);
       else console.error(`Set Configuration: ${error}`);
     }
   }
 
-  static spawn(configLocation: string): ChildProcessWithoutNullStreams {
+  static start(configLocation: string): ChildProcessWithoutNullStreams {
     return spawn(BINARY_FILE, ['-c', configLocation]);
   }
 
