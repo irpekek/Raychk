@@ -1,5 +1,5 @@
-import { Outbound, Protocol } from "../types/outbound.type.d.ts";
-import { Transport } from "../types/transport.type.d.ts";
+import { Outbound, Protocol } from '../types/outbound.type.d.ts';
+import { Transport } from '../types/transport.type.d.ts';
 import { Trojan } from './communication/Trojan.ts';
 import { Vless } from './communication/Vless.ts';
 import { Vmess } from './communication/Vmess.ts';
@@ -14,7 +14,11 @@ type AdditionalData = {
 type CommunicationService = Vmess | Vless | Trojan;
 
 export class OutboundService {
-  protected _outbound: Outbound[] = [];
+  protected _outbound: Outbound[];
+
+  constructor() {
+    this._outbound = [];
+  }
 
   public all(): Outbound[] {
     return this._outbound;
@@ -24,8 +28,12 @@ export class OutboundService {
     this._outbound.length = 0;
   }
 
-  private save(outbound: Outbound): void {
+  public save(outbound: Outbound): void {
     this._outbound.push(outbound);
+  }
+
+  public allTags(): string[] {
+    return this._outbound.map((outbound) => outbound.tag);
   }
 
   private createOutbound(
@@ -93,7 +101,7 @@ export class OutboundService {
     transport: Transport,
     additionalData?: AdditionalData,
   ) {
-    if (this.hasTag(name)) return console.error(`${name} tag is already taken`);
+    if (this.hasTag(name)) throw new Error(`${name} tag is already taken`);
     const communicationProtocol = new Vmess(id, server, port);
     const transportProtocol = this.transportSelection(
       transport,
@@ -118,7 +126,7 @@ export class OutboundService {
     transport: Transport,
     additionalData?: AdditionalData,
   ) {
-    if (this.hasTag(name)) return console.error(`${name} tag is already taken`);
+    if (this.hasTag(name)) throw new Error(`${name} tag is already taken`);
     const communicationProtocol = new Vless(id, server, port);
     const transportProtocol = this.transportSelection(
       transport,

@@ -22,6 +22,9 @@ import { XrayService as Xray } from './XrayService.ts';
 import { XrayConfiguration } from '../types/xray.type.d.ts';
 import { Outbound } from '../types/outbound.type.d.ts';
 import { infoIP, IPInfo } from '../utils/ipinfo.ts';
+import { InboundService } from './InboundService.ts';
+import { RoutingService } from './RoutingService.ts';
+import { ChildProcessWithoutNullStreams } from 'node:child_process';
 
 class ProxyService {
   protected _proxies: Proxy[];
@@ -33,6 +36,7 @@ class ProxyService {
   protected readonly XRAY_START_TIMEOUT = 5000;
   protected readonly IP_FETCH_TIMEOUT = 15000;
   protected readonly POST_START_DELAY = 1000;
+  protected readonly HTTP_LISTEN = '127.0.0.1';
 
   constructor() {
     this._proxies = [];
@@ -282,9 +286,10 @@ class ProxyService {
     return outbound.all();
   }
 
-  private async checkProxy(): Promise<IPInfo | null> {
-    const xray = Xray.spawn(`${TEMP_DIR}/config.json`);
-
+  private async checkProxy(
+    xray: ChildProcessWithoutNullStreams,
+    fp: (VmessProxy | VlessProxy | TrojanProxy)[],
+  ) {
     try {
       const isStarted = await Promise.race([
         Xray.findStringOut(xray, 'started', this.XRAY_START_TIMEOUT),
@@ -297,28 +302,40 @@ class ProxyService {
       ]);
 
       if (!isStarted) throw new Error('Xray failed to start');
-      await new Promise((resolve) =>
-        setTimeout(resolve, this.POST_START_DELAY),
+
+      await Promise.all(
+        fp.map(async (proxy, index) => {
+          const port = 1081 + index;
+          try {
+            const info = await Promise.race([
+              infoIP(this.HTTP_LISTEN, port),
+              new Promise<IPInfo | null>((resolve) =>
+                setTimeout(() => resolve(null), this.IP_FETCH_TIMEOUT),
+              ),
+            ]);
+            if (info) this._liveProxies.add(proxy);
+          } catch (error: unknown) {
+            if (Error.isError(error))
+              console.error(
+                `Check failed for ${proxy.server} (port: ${port}): ${error.message}`,
+              );
+            else
+              console.error(
+                `Unexpected error for ${proxy.server} (port: ${port}): ${error}`,
+              );
+          }
+        }),
       );
 
-      const ipInfo = await Promise.race([
-        infoIP('127.0.0.1', 1081),
-        new Promise<IPInfo | null>((resolve) =>
-          setTimeout(() => {
-            resolve(null);
-          }, this.IP_FETCH_TIMEOUT),
-        ),
-      ]);
-
-      if (!ipInfo) throw new Error('Invalid or empty IP respons');
-      return ipInfo;
-    } catch (error: unknown) {
-      if (Error.isError(error))
-        console.error('Proxy check failed:', error.message);
-      return null;
-    } finally {
+      // Kill Xray after all check
       if (xray && !xray.killed) xray.kill('SIGTERM');
-      await new Promise((resolve) => setTimeout(resolve, 500)); // Wait for Xray to exit
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } catch (error: unknown) {
+      console.error('Scan failed:', error);
+    } finally {
+      // Ensure Xray is killed even on error
+      if (xray && !xray.killed) xray.kill('SIGTERM');
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
@@ -332,37 +349,71 @@ class ProxyService {
     await this.file(srcConf.dir, srcConf.base);
     this.reshape().filter();
 
-    for (const proxy of this._filteredProxies) {
-      console.log(`Started: ${proxy.server}`); // DELETE THIS
+    const outboundService = new OutboundService();
+    const inboundService = new InboundService();
+    const routingService = new RoutingService();
 
+    let portCounter = 1081;
+    const fp = Array.from(this._filteredProxies);
+    for (const [index, proxy] of fp.entries()) {
+      const outboundNameTag = 'Proxy ' + (index + 1);
+      const inboundNameTag = 'Http ' + (index + 1);
       let outbounds: Outbound[];
+
+      // Create outbounds from all filtered proxies and save them to outboundService
       switch (true) {
         case isVmess(proxy):
-          outbounds = this.generateConfig(proxy);
+          outbounds = this.generateConfig({ ...proxy, name: outboundNameTag });
+          if (outbounds.length > 0) outboundService.save(outbounds[0]);
           break;
         case isVless(proxy):
-          outbounds = this.generateConfig(proxy);
+          outbounds = this.generateConfig({ ...proxy, name: outboundNameTag });
+          if (outbounds.length > 0) outboundService.save(outbounds[0]);
           break;
         case isTrojan(proxy):
-          outbounds = this.generateConfig(proxy);
+          outbounds = this.generateConfig({ ...proxy, name: outboundNameTag });
+          if (outbounds.length > 0) outboundService.save(outbounds[0]);
           break;
         default:
           console.error('Config not supported');
           continue;
       }
 
+      // Create inbounds http protocol for each proxy with a unique port
+      inboundService.http(this.HTTP_LISTEN, portCounter, inboundNameTag);
+
+      // Create routing rules for each proxy
+      routingService.addRule(
+        'hybrid',
+        'field',
+        [inboundNameTag],
+        outboundNameTag,
+      );
+
+      portCounter++;
+    }
+
+    try {
       const defaultConfig = await Xray.getConfiguration(
         CONFIG_DIR,
         'defaultConfig.json',
       );
+
       const config: XrayConfiguration = {
         ...defaultConfig,
-        outbounds,
+        inbounds: inboundService.inbounds,
+        outbounds: outboundService.all(),
+        routing: routingService.routing,
       };
+
       await Xray.setConfiguration(TEMP_DIR, 'config.json', config);
-      const live = await this.checkProxy();
-      if (live) this._liveProxies.add(proxy);
-      console.log(`End: ${proxy.server}`);
+
+      const xray = Xray.spawn(`${TEMP_DIR}/config.json`);
+
+      await this.checkProxy(xray, fp);
+    } catch (error: unknown) {
+      if (Error.isError(error)) console.error(`Scan failed: ${error.message}`);
+      else console.error(`Unknown error, Scan failed: ${error}`);
     }
 
     this.result();
@@ -377,7 +428,7 @@ class ProxyService {
       proxies: Array.from(this._liveProxies),
     });
     Deno.writeTextFileSync(name, content);
-    console.log(`Proxy saved at Live Proxy ${dt}.yaml`);
+    console.log(`Saved File: Live Proxy ${dt}.yaml`);
   }
 }
 
