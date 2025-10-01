@@ -25,6 +25,7 @@ import { infoIP, IPInfo } from '../utils/ipinfo.ts';
 import { InboundService } from './InboundService.ts';
 import { RoutingService } from './RoutingService.ts';
 import { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { validate } from '@std/uuid';
 
 class ProxyService {
   protected _proxies: Proxy[];
@@ -61,7 +62,7 @@ class ProxyService {
   public async file(path: string, fileName: string) {
     try {
       const text = await Deno.readTextFile(`${path}/${fileName}`);
-      const parsedObj = YAML.parse(text);
+      const parsedObj = YAML.parse(text, { merge: true });
       if (hasProxies(parsedObj)) this._proxies = parsedObj.proxies;
       else throw new Error('proxies are not found');
     } catch (err: unknown) {
@@ -183,6 +184,14 @@ class ProxyService {
 
     for (const proxy of proxies) {
       if (!proxy.server) continue;
+      if (!isTrojan(proxy) && !validate(proxy.uuid)) continue; // check if the uuid is valid for vmess and vless
+
+      // Check if port is valid for proxy which is a number
+      if (typeof proxy.port === 'string') {
+        const p = parseInt(proxy.port);
+        if (isNaN(p)) continue;
+        proxy.port = p;
+      }
 
       // check if the server is blocked by ip prefix
       const isBlockedIp = this._blockedIpPrefix.some((prefix) =>
@@ -407,9 +416,7 @@ class ProxyService {
       };
 
       await Xray.setConfiguration(TEMP_DIR, 'config.json', config);
-
       const xray = Xray.spawn(`${TEMP_DIR}/config.json`);
-
       await this.checkProxy(xray, fp);
     } catch (error: unknown) {
       if (Error.isError(error)) console.error(`Scan failed: ${error.message}`);
