@@ -1,12 +1,14 @@
-import { Outbound } from "./outbound.type.d.ts";
+import { Inbound } from './inbound.type.d.ts';
+import { Outbound } from './outbound.type.d.ts';
+import { Routing } from './routing.type.d.ts';
 
 export interface XrayConfiguration {
   log: object;
   api?: object;
   dns?: object;
-  routing: object;
+  routing: Routing;
   policy?: object;
-  inbounds: [];
+  inbounds: Inbound[];
   outbounds: Outbound[];
   stats?: object;
   reverse?: object;
