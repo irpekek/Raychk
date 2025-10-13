@@ -68,9 +68,11 @@ class ProxyService {
       if (hasProxies(parsedObj)) this._proxies = parsedObj.proxies;
       else throw new Error('proxies are not found');
     } catch (error: unknown) {
-      if (isError(error))
+      if (isError(error)) {
         console.error('Failed to read proxies file:', error.message);
-      else console.error('Unknown error, Failed to read proxies file:', error);
+      } else {
+        console.error('Unknown error, Failed to read proxies file:', error);
+      }
       Deno.exit(1);
     }
   }
@@ -81,7 +83,7 @@ class ProxyService {
     const vReshape = (
       proxy: VmessProxy | VlessProxy,
       tls: boolean,
-      transport: Transport,
+      transport: Transport
     ) => {
       // * Vmess WS TLS
       if (transport === 'ws' && tls) {
@@ -128,7 +130,7 @@ class ProxyService {
     const tReshape = (
       proxy: TrojanProxy,
       tls: boolean,
-      transport: Transport,
+      transport: Transport
     ) => {
       // * Trojan WS TLS
       if (transport === 'ws' && tls) {
@@ -199,7 +201,7 @@ class ProxyService {
 
       // check if the server is blocked by ip prefix
       const isBlockedIp = this._blockedIpPrefix.some((prefix) =>
-        proxy.server.startsWith(prefix),
+        proxy.server.startsWith(prefix)
       );
 
       const isBlockedDomain = this._blockedDomain.includes(proxy.server); // check if the server is inluded in the blocked domain list
@@ -214,22 +216,28 @@ class ProxyService {
   }
 
   private generateConfig(
-    proxy: VmessProxy | VlessProxy | TrojanProxy,
+    proxy: VmessProxy | VlessProxy | TrojanProxy
   ): Outbound[] {
     const outbound = new OutboundService();
-
+    const { name, server, port } = proxy;
     function vmess(
       proxy: VmessProxy,
       obs: OutboundService,
       tls: boolean,
-      transport: Transport,
+      transport: Transport
     ) {
+      const { uuid } = proxy;
       if (proxy['ws-opts']) {
-        const { name, uuid, server, port } = proxy;
         const { path } = proxy['ws-opts'];
         obs.vmess(name, uuid, server, port, tls, transport, {
           path,
           host: server,
+        });
+      }
+
+      if (proxy['grpc-opts'] && transport === 'grpc') {
+        obs.vmess(name, uuid, server, port, tls, transport, {
+          serviceName: proxy['grpc-opts']['grpc-service-name'],
         });
       }
     }
@@ -238,14 +246,20 @@ class ProxyService {
       proxy: VlessProxy,
       obs: OutboundService,
       tls: boolean,
-      transport: Transport,
+      transport: Transport
     ) {
+      const { uuid } = proxy;
       if (proxy['ws-opts']) {
-        const { name, uuid, server, port } = proxy;
         const { path } = proxy['ws-opts'];
         obs.vmess(name, uuid, server, port, tls, transport, {
           path,
           host: server,
+        });
+      }
+
+      if (proxy['grpc-opts'] && transport === 'grpc') {
+        obs.vmess(name, uuid, server, port, tls, transport, {
+          serviceName: proxy['grpc-opts']['grpc-service-name'],
         });
       }
     }
@@ -254,14 +268,20 @@ class ProxyService {
       proxy: TrojanProxy,
       obs: OutboundService,
       tls: boolean,
-      transport: Transport,
+      transport: Transport
     ) {
+      const { password } = proxy;
       if (proxy['ws-opts']) {
-        const { name, password, server, port } = proxy;
         const { path } = proxy['ws-opts'];
         obs.trojan(name, password, server, port, tls, transport, {
           path,
           host: server,
+        });
+      }
+
+      if (proxy['grpc-opts'] && transport === 'grpc') {
+        obs.trojan(name, password , server, port, tls, transport, {
+          serviceName: proxy['grpc-opts']['grpc-service-name'],
         });
       }
     }
@@ -269,28 +289,34 @@ class ProxyService {
     switch (true) {
       case isVmess(proxy):
         // Vmess Websocket
-        if (isWebsocket(proxy) && isTLS(proxy))
+        if (isWebsocket(proxy) && isTLS(proxy)) {
           vmess(proxy, outbound, true, 'ws');
-        if (isWebsocket(proxy) && !isTLS(proxy))
+        }
+        if (isWebsocket(proxy) && !isTLS(proxy)) {
           vmess(proxy, outbound, false, 'ws');
+        }
         // Vmess GRPC
         if (isGRPC(proxy)) vmess(proxy, outbound, true, 'grpc');
         break;
       case isVless(proxy):
         // Vless Websocket
-        if (isWebsocket(proxy) && isTLS(proxy))
+        if (isWebsocket(proxy) && isTLS(proxy)) {
           vless(proxy, outbound, true, 'ws');
-        if (isWebsocket(proxy) && !isTLS(proxy))
+        }
+        if (isWebsocket(proxy) && !isTLS(proxy)) {
           vless(proxy, outbound, false, 'ws');
+        }
         // vless GRPC
         if (isGRPC(proxy)) vless(proxy, outbound, true, 'grpc');
         break;
       case isTrojan(proxy):
         // Trojan Websocket
-        if (isWebsocket(proxy) && isTLS(proxy))
+        if (isWebsocket(proxy) && isTLS(proxy)) {
           trojan(proxy, outbound, true, 'ws');
-        if (isWebsocket(proxy) && !isTLS(proxy))
+        }
+        if (isWebsocket(proxy) && !isTLS(proxy)) {
           trojan(proxy, outbound, false, 'ws');
+        }
         // Trojan GRPC
         if (isGRPC(proxy)) trojan(proxy, outbound, true, 'grpc');
         break;
@@ -302,7 +328,7 @@ class ProxyService {
   private async throttle(
     m: Array<() => Promise<void>>,
     concurrency: number = 20,
-    timeout: number = 1000,
+    timeout: number = 1000
   ) {
     for (let i = 0; i < m.length; i += concurrency) {
       console.log(`${i + 1} ~ ${Math.min(i + concurrency, m.length)}`);
@@ -314,7 +340,7 @@ class ProxyService {
 
   private async checkProxy(
     xray: ChildProcessWithoutNullStreams,
-    fp: (VmessProxy | VlessProxy | TrojanProxy)[],
+    fp: (VmessProxy | VlessProxy | TrojanProxy)[]
   ) {
     try {
       const isStarted = await Promise.race([
@@ -322,8 +348,8 @@ class ProxyService {
         new Promise<boolean>((_, reject) =>
           setTimeout(
             () => reject(new Error('Xray start timeout')),
-            this.XRAY_START_TIMEOUT,
-          ),
+            this.XRAY_START_TIMEOUT
+          )
         ),
       ]);
 
@@ -336,19 +362,20 @@ class ProxyService {
           const info = await Promise.race([
             infoIP(this.HTTP_LISTEN, port),
             new Promise<IPInfo | null>((resolve) =>
-              setTimeout(() => resolve(null), this.IP_FETCH_TIMEOUT),
+              setTimeout(() => resolve(null), this.IP_FETCH_TIMEOUT)
             ),
           ]);
           if (info) this._liveProxies.add(proxy);
         } catch (error: unknown) {
-          if (isError(error))
+          if (isError(error)) {
             console.error(
-              `Check failed for ${proxy.server} (port: ${port}): ${error.message}`,
+              `Check failed for ${proxy.server} (port: ${port}): ${error.message}`
             );
-          else
+          } else {
             console.error(
-              `Unexpected error for ${proxy.server} (port: ${port}): ${error}`,
+              `Unexpected error for ${proxy.server} (port: ${port}): ${error}`
             );
+          }
         }
       });
 
@@ -368,15 +395,18 @@ class ProxyService {
   }
 
   public async scan(filePath: string) {
-    if (BINARY_FILE === 'not found')
+    if (BINARY_FILE === 'not found') {
       return console.error(
-        'Xray binary file not found, please install xray first',
+        'Xray binary file not found, please install xray first'
       );
+    }
 
     const srcConf = path.parse(filePath);
     await this.file(srcConf.dir, srcConf.base);
     const timeStart = Date.now();
     this.reshape().filter();
+    // console.log("Reshaped: ",this._reshapedProxies)
+    // console.log("Filtered: ",this._filteredProxies)
 
     const outboundService = new OutboundService();
     const inboundService = new InboundService();
@@ -393,6 +423,7 @@ class ProxyService {
         ...proxy,
         name: outboundNameTag,
       });
+
       if (outbounds.length > 0) outboundService.add(outbounds[0]);
       else continue;
 
@@ -404,7 +435,7 @@ class ProxyService {
         'hybrid',
         'field',
         [inboundNameTag],
-        outboundNameTag,
+        outboundNameTag
       );
 
       portCounter++;
@@ -413,7 +444,7 @@ class ProxyService {
     try {
       const defaultConfig = await Xray.getConfiguration(
         CONFIG_DIR,
-        'defaultConfig.json',
+        'defaultConfig.json'
       );
 
       const config: XrayConfiguration = {
@@ -432,7 +463,7 @@ class ProxyService {
       else console.error(`Unknown error, Scan failed: ${error}`);
     }
     console.log(
-      `Scan finished in ${((Date.now() - timeStart) / 1000).toFixed(2)} seconds`,
+      `Scan finished in ${((Date.now() - timeStart) / 1000).toFixed(2)} seconds`
     );
     this.result();
   }
