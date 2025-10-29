@@ -26,6 +26,7 @@ import { InboundService } from './InboundService.ts';
 import { RoutingService } from './RoutingService.ts';
 import { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { validate } from '@std/uuid';
+import { Vmess } from "./communication/Vmess.ts";
 
 const { isError } = Error;
 
@@ -190,7 +191,16 @@ class ProxyService {
 
     for (const proxy of proxies) {
       if (!proxy.server) continue;
-      if (!isTrojan(proxy) && !validate(proxy.uuid)) continue; // check if the uuid is valid for vmess and vless
+
+      // Check for valid UUID and password
+      switch (true) {
+        case isTrojan(proxy):
+          if (!proxy.password) continue
+          break
+        case isVless(proxy) || isVmess(proxy):
+          if (!proxy.uuid || !validate(proxy.uuid)) continue
+          break
+      }
 
       // Check if port is valid for proxy which is a number
       if (typeof proxy.port === 'string') {
