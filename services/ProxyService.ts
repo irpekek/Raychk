@@ -26,7 +26,6 @@ import { InboundService } from './InboundService.ts';
 import { RoutingService } from './RoutingService.ts';
 import { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { validate } from '@std/uuid';
-import { Vmess } from "./communication/Vmess.ts";
 
 const { isError } = Error;
 
@@ -195,11 +194,11 @@ class ProxyService {
       // Check for valid UUID and password
       switch (true) {
         case isTrojan(proxy):
-          if (!proxy.password) continue
-          break
+          if (!proxy.password) continue;
+          break;
         case isVless(proxy) || isVmess(proxy):
-          if (!proxy.uuid || !validate(proxy.uuid)) continue
-          break
+          if (!proxy.uuid || !validate(proxy.uuid)) continue;
+          break;
       }
 
       // Check if port is valid for proxy which is a number
@@ -290,7 +289,7 @@ class ProxyService {
       }
 
       if (proxy['grpc-opts'] && transport === 'grpc') {
-        obs.trojan(name, password , server, port, tls, transport, {
+        obs.trojan(name, password, server, port, tls, transport, {
           serviceName: proxy['grpc-opts']['grpc-service-name'],
         });
       }
@@ -335,17 +334,20 @@ class ProxyService {
     return outbound.outbounds;
   }
 
-  private async throttle(
-    m: Array<() => Promise<void>>,
+  private async throttle<T>(
+    ps: Array<() => Promise<T>>,
     concurrency: number = 20,
     timeout: number = 1000
-  ) {
-    for (let i = 0; i < m.length; i += concurrency) {
-      console.log(`${i + 1} ~ ${Math.min(i + concurrency, m.length)}`);
-      const batch = m.slice(i, i + concurrency);
-      await Promise.all(batch.map((fn) => fn()));
+  ): Promise<T[]> {
+    const result: T[] = [];
+    for (let i = 0; i < ps.length; i += concurrency) {
+      console.log(`${i + 1} ~ ${Math.min(i + concurrency, ps.length)}`);
+      const batch = ps.slice(i, i + concurrency);
+      const batchResult = await Promise.all<T>(batch.map((fn) => fn()));
+      result.push(...batchResult);
       await new Promise((resolve) => setTimeout(resolve, timeout));
     }
+    return result;
   }
 
   private async checkProxy(
@@ -375,7 +377,7 @@ class ProxyService {
               setTimeout(() => resolve(null), this.IP_FETCH_TIMEOUT)
             ),
           ]);
-          if (info) this._liveProxies.add(proxy);
+          return info ? proxy : null;
         } catch (error: unknown) {
           if (isError(error)) {
             console.error(
@@ -386,10 +388,14 @@ class ProxyService {
               `Unexpected error for ${proxy.server} (port: ${port}): ${error}`
             );
           }
+          return null;
         }
       });
 
-      await this.throttle(promisesProxy, 20); // Throttle the check to prevent Xray from being overwhelmed
+      const pResult = await this.throttle(promisesProxy, 20); // Throttle the check to prevent Xray from being overwhelmed
+      pResult.map((e) => {
+        if (e !== null) this._liveProxies.add(e);
+      });
 
       // Kill Xray after all check
       if (xray && !xray.killed) xray.kill('SIGTERM');
