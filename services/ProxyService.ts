@@ -263,14 +263,14 @@ class ProxyService {
       const { uuid } = proxy;
       if (proxy["ws-opts"]) {
         const { path } = proxy["ws-opts"];
-        obs.vmess(name, uuid, server, port, tls, transport, {
+        obs.vless(name, uuid, server, port, tls, transport, {
           path,
           host: server,
         });
       }
 
       if (proxy["grpc-opts"] && transport === "grpc") {
-        obs.vmess(name, uuid, server, port, tls, transport, {
+        obs.vless(name, uuid, server, port, tls, transport, {
           serviceName: proxy["grpc-opts"]["grpc-service-name"],
         });
       }
